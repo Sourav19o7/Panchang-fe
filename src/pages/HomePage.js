@@ -2,16 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { 
   Calendar, 
   TrendingUp, 
-  Star, 
   Users, 
-  Plus, 
-  FileText, 
   BarChart3, 
-  MessageSquare,
-  Sparkles,
-  ChevronRight,
+  FileText, 
+  MessageSquare, 
+  Clock,
+  CheckCircle,
+  AlertTriangle,
+  User,
+  Plus,
+  Star,
   Target,
-  Activity
+  Download,
+  Activity,
+  ChevronRight,
+  Sparkles
 } from 'lucide-react';
 
 // Mock navigation function for demo
