@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
-import { Sparkles, FileText, Download, Plus, Trash2, Upload, Calendar } from 'lucide-react';
+import { Sparkles, FileText, Download, Plus, Trash2, Upload, Calendar, RefreshCw } from 'lucide-react';
 
 const PropositionGenerator = () => {
   const [loading, setLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [experimentLoading, setExperimentLoading] = useState(false);
+  const [panchangLoading, setPanchangLoading] = useState(false);
   const [formData, setFormData] = useState({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
@@ -24,6 +25,8 @@ const PropositionGenerator = () => {
   const [propositions, setPropositions] = useState(null);
   const [experimentalPujas, setExperimentalPujas] = useState(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [availablePDFs, setAvailablePDFs] = useState([]);
+  const [panchangData, setPanchangData] = useState(null);
 
   const deities = [
     'Ganesha', 'Shiva', 'Vishnu', 'Durga', 'Lakshmi', 'Saraswati', 
@@ -51,6 +54,22 @@ const PropositionGenerator = () => {
     'Saptami', 'Ashtami', 'Navami', 'Dashami', 'Ekadashi', 'Dwadashi',
     'Trayodashi', 'Chaturdashi', 'Purnima', 'Amavasya'
   ];
+
+  // Load available PDFs on component mount
+  useEffect(() => {
+    loadAvailablePDFs();
+  }, []);
+
+  const loadAvailablePDFs = async () => {
+    try {
+      const response = await api.listPDFs();
+      if (response.data.success) {
+        setAvailablePDFs(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error loading PDFs:', error);
+    }
+  };
 
   const handleFormChange = (e) => {
     setFormData({
@@ -108,6 +127,7 @@ const PropositionGenerator = () => {
       const response = await api.uploadPDFs(formData);
       if (response.data.success) {
         setUploadedFiles([...uploadedFiles, ...response.data.data]);
+        await loadAvailablePDFs(); // Refresh the list
         toast.success(`Uploaded ${files.length} PDF file(s) successfully!`);
       } else {
         toast.error('Failed to upload PDF files');
@@ -116,6 +136,43 @@ const PropositionGenerator = () => {
       console.error('Upload error:', error);
       toast.error('Failed to upload PDF files');
     }
+  };
+
+  const loadPanchangForMonth = async () => {
+    setPanchangLoading(true);
+    try {
+      const response = await api.generateMonthlyPanchang({
+        month: formData.month,
+        year: formData.year,
+        location: 'delhi'
+      });
+      
+      if (response.data.success) {
+        setPanchangData(response.data.data);
+        toast.success('Panchang data loaded successfully!');
+      } else {
+        toast.error('Failed to load Panchang data');
+      }
+    } catch (error) {
+      console.error('Error loading Panchang:', error);
+      toast.error('Failed to load Panchang data');
+    } finally {
+      setPanchangLoading(false);
+    }
+  };
+
+  const fillPanchangData = (index, panchangDay) => {
+    if (!panchangDay) return;
+    
+    const newDates = [...dates];
+    newDates[index] = {
+      ...newDates[index],
+      tithi: panchangDay.tithi || '',
+      grahaTransit: panchangDay.grahaTransits?.length > 0 
+        ? `${panchangDay.grahaTransits[0].planet} in ${panchangDay.grahaTransits[0].sign}` 
+        : ''
+    };
+    setDates(newDates);
   };
 
   const handleSubmit = async (e) => {
@@ -134,7 +191,12 @@ const PropositionGenerator = () => {
       const response = await api.generatePropositions({
         ...formData,
         dates: validDates,
-        pdfFiles: uploadedFiles.map(file => file.filename)
+        pdfFiles: uploadedFiles.map(file => file.filename || file.name),
+        customParameters: {
+          includeWhyWhyAnalysis: true,
+          generateTaglines: true,
+          detailedRationale: true
+        }
       });
       
       if (response.data.success) {
@@ -145,7 +207,13 @@ const PropositionGenerator = () => {
       }
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Failed to generate propositions');
+      if (error.response?.status === 401) {
+        toast.error('Please login to generate propositions');
+      } else if (error.response?.status === 429) {
+        toast.error('Rate limit exceeded. Please try again later.');
+      } else {
+        toast.error('Failed to generate propositions');
+      }
     } finally {
       setLoading(false);
     }
@@ -158,7 +226,12 @@ const PropositionGenerator = () => {
       const response = await api.generateExperimentalPujas({
         month: formData.month,
         year: formData.year,
-        pdfFiles: uploadedFiles.map(file => file.filename)
+        pdfFiles: uploadedFiles.map(file => file.filename || file.name),
+        experimentParameters: {
+          riskTolerance: 'medium',
+          innovationLevel: 'high',
+          marketTrends: true
+        }
       });
       
       if (response.data.success) {
@@ -188,12 +261,13 @@ const PropositionGenerator = () => {
         month: formData.month,
         year: formData.year,
         propositionIds: propositions.savedIds || [],
-        spreadsheetTitle: `Puja Propositions - ${months[formData.month - 1]} ${formData.year}`
+        spreadsheetTitle: `Puja Propositions - ${months[formData.month - 1]} ${formData.year}`,
+        includeExperiments: !!experimentalPujas
       });
       
       if (response.data.success) {
         toast.success('Propositions exported to Google Sheets!');
-        if (response.data.data.spreadsheetUrl) {
+        if (response.data.data.spreadsheetUrl && response.data.data.spreadsheetUrl !== 'mock_url') {
           window.open(response.data.data.spreadsheetUrl, '_blank');
         }
       } else {
@@ -207,26 +281,13 @@ const PropositionGenerator = () => {
     }
   };
 
-  const getRandomTithi = () => {
-    return tithis[Math.floor(Math.random() * tithis.length)];
-  };
-
-  const getRandomGrahaTransit = () => {
-    const grahas = ['Jupiter', 'Saturn', 'Mars', 'Venus', 'Mercury'];
-    const signs = ['Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo', 'Libra', 'Scorpio'];
-    const graha = grahas[Math.floor(Math.random() * grahas.length)];
-    const sign = signs[Math.floor(Math.random() * signs.length)];
-    return `${graha} in ${sign}`;
-  };
-
-  const fillRandomData = (index) => {
-    const newDates = [...dates];
-    newDates[index] = {
-      ...newDates[index],
-      tithi: getRandomTithi(),
-      grahaTransit: getRandomGrahaTransit()
-    };
-    setDates(newDates);
+  const getPanchangDayForDate = (selectedDate) => {
+    if (!panchangData?.data || !selectedDate) return null;
+    
+    return panchangData.data.find(day => {
+      const dayDate = new Date(day.date).toISOString().split('T')[0];
+      return dayDate === selectedDate;
+    });
   };
 
   return (
@@ -278,6 +339,28 @@ const PropositionGenerator = () => {
                 required
               />
             </div>
+
+            <div className="form-group">
+              <button
+                type="button"
+                onClick={loadPanchangForMonth}
+                className="btn"
+                disabled={panchangLoading}
+                style={{ marginTop: '1.5rem' }}
+              >
+                {panchangLoading ? (
+                  <>
+                    <div className="spinner" style={{ width: '16px', height: '16px', marginRight: '8px' }}></div>
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    Load Panchang
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="form-group">
@@ -306,18 +389,52 @@ const PropositionGenerator = () => {
               className="form-input"
               style={{ padding: '12px' }}
             />
+            
+            {/* Available PDFs */}
+            {availablePDFs.length > 0 && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <small style={{ color: '#666' }}>Available PDFs in system:</small>
+                <div className="taglines">
+                  {availablePDFs.map((file, index) => (
+                    <span key={index} className="tagline-item" style={{ fontSize: '0.8rem' }}>
+                      📄 {file.filename}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Uploaded Files */}
             {uploadedFiles.length > 0 && (
               <div style={{ marginTop: '0.5rem' }}>
+                <small style={{ color: '#28a745' }}>Recently uploaded:</small>
                 <div className="taglines">
                   {uploadedFiles.map((file, index) => (
-                    <span key={index} className="tagline-item">
-                      📄 {file.filename || `File ${index + 1}`}
+                    <span key={index} className="tagline-item" style={{ background: 'rgba(40, 167, 69, 0.1)', color: '#28a745' }}>
+                      📄 {file.filename || file.name}
                     </span>
                   ))}
                 </div>
               </div>
             )}
           </div>
+
+          {/* Panchang Summary */}
+          {panchangData && (
+            <div style={{ 
+              background: 'rgba(102, 126, 234, 0.1)', 
+              padding: '1rem', 
+              borderRadius: '10px', 
+              marginBottom: '1rem' 
+            }}>
+              <h4 style={{ color: '#667eea', margin: '0 0 0.5rem 0' }}>
+                📅 Panchang Data Loaded
+              </h4>
+              <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
+                {panchangData.data?.length || 0} days of data available for {months[formData.month - 1]} {formData.year}
+              </p>
+            </div>
+          )}
 
           {/* Dates Configuration */}
           <div style={{ marginBottom: '1.5rem' }}>
@@ -337,116 +454,137 @@ const PropositionGenerator = () => {
               </button>
             </div>
 
-            {dates.map((dateItem, index) => (
-              <div key={index} style={{ 
-                background: 'rgba(255, 255, 255, 0.8)', 
-                padding: '1.5rem', 
-                borderRadius: '15px', 
-                marginBottom: '1rem',
-                border: '1px solid #e2e8f0',
-                position: 'relative'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h4 style={{ color: '#333', margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>
-                    Puja Configuration {index + 1}
-                  </h4>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={() => fillRandomData(index)}
-                      style={{ 
-                        background: 'rgba(102, 126, 234, 0.1)', 
-                        border: '1px solid rgba(102, 126, 234, 0.3)', 
-                        color: '#667eea', 
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        fontSize: '0.75rem',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Fill Sample Data
-                    </button>
-                    {dates.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeDate(index)}
-                        style={{ background: 'none', border: 'none', color: '#dc3545', cursor: 'pointer' }}
+            {dates.map((dateItem, index) => {
+              const panchangDay = getPanchangDayForDate(dateItem.date);
+              
+              return (
+                <div key={index} style={{ 
+                  background: 'rgba(255, 255, 255, 0.8)', 
+                  padding: '1.5rem', 
+                  borderRadius: '15px', 
+                  marginBottom: '1rem',
+                  border: '1px solid #e2e8f0',
+                  position: 'relative'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h4 style={{ color: '#333', margin: 0, fontSize: '1.1rem', fontWeight: '600' }}>
+                      Puja Configuration {index + 1}
+                    </h4>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {panchangDay && (
+                        <button
+                          type="button"
+                          onClick={() => fillPanchangData(index, panchangDay)}
+                          style={{ 
+                            background: 'rgba(255, 107, 53, 0.1)', 
+                            border: '1px solid rgba(255, 107, 53, 0.3)', 
+                            color: '#ff6b35', 
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Use Panchang Data
+                        </button>
+                      )}
+                      {dates.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeDate(index)}
+                          style={{ background: 'none', border: 'none', color: '#dc3545', cursor: 'pointer' }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Panchang Info */}
+                  {panchangDay && (
+                    <div style={{ 
+                      background: 'rgba(255, 107, 53, 0.05)', 
+                      padding: '0.75rem', 
+                      borderRadius: '8px', 
+                      marginBottom: '1rem',
+                      fontSize: '0.85rem'
+                    }}>
+                      <strong>Available Panchang Data:</strong> {panchangDay.tithi}
+                      {panchangDay.nakshatra && ` • ${panchangDay.nakshatra}`}
+                      {panchangDay.festivals?.length > 0 && ` • ${panchangDay.festivals.join(', ')}`}
+                    </div>
+                  )}
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Date *</label>
+                      <input
+                        type="date"
+                        value={dateItem.date}
+                        onChange={(e) => handleDateChange(index, 'date', e.target.value)}
+                        className="form-input"
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Tithi</label>
+                      <select
+                        value={dateItem.tithi}
+                        onChange={(e) => handleDateChange(index, 'tithi', e.target.value)}
+                        className="form-input"
                       >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
+                        <option value="">Select Tithi</option>
+                        {tithis.map((tithi) => (
+                          <option key={tithi} value={tithi}>{tithi}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Graha Transit</label>
+                      <input
+                        type="text"
+                        value={dateItem.grahaTransit}
+                        onChange={(e) => handleDateChange(index, 'grahaTransit', e.target.value)}
+                        className="form-input"
+                        placeholder="e.g., Jupiter in Taurus"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label className="form-label">Deity *</label>
+                      <select
+                        value={dateItem.deity}
+                        onChange={(e) => handleDateChange(index, 'deity', e.target.value)}
+                        className="form-input"
+                        required
+                      >
+                        {deities.map((deity) => (
+                          <option key={deity} value={deity}>{deity}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Use Case *</label>
+                      <select
+                        value={dateItem.useCase}
+                        onChange={(e) => handleDateChange(index, 'useCase', e.target.value)}
+                        className="form-input"
+                        required
+                      >
+                        {useCases.map((useCase) => (
+                          <option key={useCase} value={useCase}>{useCase}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
-
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Date *</label>
-                    <input
-                      type="date"
-                      value={dateItem.date}
-                      onChange={(e) => handleDateChange(index, 'date', e.target.value)}
-                      className="form-input"
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Tithi</label>
-                    <select
-                      value={dateItem.tithi}
-                      onChange={(e) => handleDateChange(index, 'tithi', e.target.value)}
-                      className="form-input"
-                    >
-                      <option value="">Select Tithi</option>
-                      {tithis.map((tithi) => (
-                        <option key={tithi} value={tithi}>{tithi}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Graha Transit</label>
-                    <input
-                      type="text"
-                      value={dateItem.grahaTransit}
-                      onChange={(e) => handleDateChange(index, 'grahaTransit', e.target.value)}
-                      className="form-input"
-                      placeholder="e.g., Jupiter in Taurus"
-                    />
-                  </div>
-                </div>
-
-                <div className="form-row">
-                  <div className="form-group">
-                    <label className="form-label">Deity *</label>
-                    <select
-                      value={dateItem.deity}
-                      onChange={(e) => handleDateChange(index, 'deity', e.target.value)}
-                      className="form-input"
-                      required
-                    >
-                      {deities.map((deity) => (
-                        <option key={deity} value={deity}>{deity}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Use Case *</label>
-                    <select
-                      value={dateItem.useCase}
-                      onChange={(e) => handleDateChange(index, 'useCase', e.target.value)}
-                      className="form-input"
-                      required
-                    >
-                      {useCases.map((useCase) => (
-                        <option key={useCase} value={useCase}>{useCase}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Submit Button */}

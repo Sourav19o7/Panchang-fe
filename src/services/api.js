@@ -110,7 +110,95 @@ class ApiService {
     return this.get('/puja/pdfs/list');
   }
 
-  // Feedback API methods
+  async getPujaStatistics(params = {}) {
+    return this.get('/puja/statistics', { params });
+  }
+
+  async searchPropositions(params = {}) {
+    return this.get('/puja/propositions/search', { params });
+  }
+
+  async updatePropositionStatus(propositionId, data) {
+    return this.put(`/puja/propositions/${propositionId}/status`, data);
+  }
+
+  async deleteProposition(propositionId) {
+    return this.delete(`/puja/propositions/${propositionId}`);
+  }
+
+  async cloneProposition(propositionId, data) {
+    return this.post(`/puja/propositions/${propositionId}/clone`, data);
+  }
+
+  async generateWhyWhyAnalysis(data) {
+    return this.post('/puja/analysis/why-why', data);
+  }
+
+  async getPanchangForDate(date, location = 'delhi') {
+    return this.get('/puja/panchang/date', { 
+      params: { date, location } 
+    });
+  }
+
+  async getSeasonalEvents(month) {
+    return this.get('/puja/seasonal-events', { 
+      params: { month } 
+    });
+  }
+
+  async saveFocusSuggestion(data) {
+    return this.post('/puja/focus-suggestion/save', data);
+  }
+
+  async getFocusSuggestionHistory(params = {}) {
+    return this.get('/puja/focus-suggestion/history', { params });
+  }
+
+  async exportPanchangData(data) {
+    return this.post('/puja/panchang/export', data);
+  }
+
+  async bulkUpdatePropositions(data) {
+    return this.post('/puja/propositions/bulk-update', data);
+  }
+
+  async getPropositionsByCategory(category, params = {}) {
+    return this.get(`/puja/propositions/category/${category}`, { params });
+  }
+
+  async generatePropositionVariations(propositionId, data) {
+    return this.post(`/puja/propositions/${propositionId}/variations`, data);
+  }
+
+  
+
+  // Advanced analysis methods using professional prompts
+  async performCompetitiveAnalysis(data) {
+    return this.post('/puja/analysis/competitive', data);
+  }
+
+  async optimizeSeasonalStrategy(data) {
+    return this.post('/puja/analysis/seasonal', data);
+  }
+
+  // Advanced experimental methods
+  async conductInnovationWorkshop(data) {
+    return this.post('/puja/experiments/innovation-workshop', data);
+  }
+
+  async designABTest(data) {
+    return this.post('/puja/experiments/ab-test-design', data);
+  }
+
+  async generateBreakthroughIdeas(data) {
+    return this.post('/puja/experiments/breakthrough-ideas', data);
+  }
+
+  async designRapidPrototype(data) {
+    return this.post('/puja/experiments/rapid-prototype', data);
+  }
+
+  // Enhanced feedback methods
   async submitFeedback(data) {
     return this.post('/feedback/submit', data);
   }
