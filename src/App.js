@@ -21,23 +21,22 @@ import Login from './components/auth/Login';
 import Register from './components/auth/Register';
 
 function App() {
-  const { user, loading: authLoading, checkAuthStatus } = useAuth();
+  const { user, loading: authLoading, isAuthenticated, initialized } = useAuth();
   const { loading: appLoading, sidebarOpen } = useApp();
 
-  useEffect(() => {
-    // Check authentication status on app load
-    checkAuthStatus();
-  }, [checkAuthStatus]);
-
   // Show loading screen while checking authentication
-  if (authLoading || appLoading) {
-    return <Loading />;
+  if (!initialized || authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loading message="Initializing application..." />
+      </div>
+    );
   }
 
   // If user is not authenticated, show auth routes
-  if (!user) {
+  if (!isAuthenticated || !user) {
     return (
-      <div className="auth-container">
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800">
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -49,66 +48,92 @@ function App() {
 
   // Main app layout for authenticated users
   return (
-    <div className="app">
+    <div className="app min-h-screen bg-gray-50">
       <Header />
-      <div className="app-content">
+      <div className="app-content flex">
         <Sidebar />
-        <main className={`main-content ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-          <div className="content-wrapper">
-            <Routes>
-              {/* Dashboard */}
-              <Route 
-                path="/" 
-                element={
-                  <ProtectedRoute>
-                    <HomePage />
-                  </ProtectedRoute>
-                } 
-              />
+        <main className={`main-content flex-1 transition-all duration-200 ${
+          sidebarOpen ? 'ml-64' : 'ml-16'
+        } pt-16`}>
+          <div className="content-wrapper p-6 max-w-7xl mx-auto">
+            {appLoading ? (
+              <Loading message="Loading..." />
+            ) : (
+              <Routes>
+                {/* Dashboard */}
+                <Route 
+                  path="/" 
+                  element={
+                    <ProtectedRoute>
+                      <HomePage />
+                    </ProtectedRoute>
+                  } 
+                />
 
-              {/* Puja Management */}
-              <Route 
-                path="/puja/*" 
-                element={
-                  <ProtectedRoute>
-                    <PujaPage />
-                  </ProtectedRoute>
-                } 
-              />
+                {/* Puja Management */}
+                <Route 
+                  path="/puja/*" 
+                  element={
+                    <ProtectedRoute>
+                      <PujaPage />
+                    </ProtectedRoute>
+                  } 
+                />
 
-              {/* Feedback Management */}
-              <Route 
-                path="/feedback/*" 
-                element={
-                  <ProtectedRoute>
-                    <FeedbackPage />
-                  </ProtectedRoute>
-                } 
-              />
+                {/* Feedback Management */}
+                <Route 
+                  path="/feedback/*" 
+                  element={
+                    <ProtectedRoute>
+                      <FeedbackPage />
+                    </ProtectedRoute>
+                  } 
+                />
 
-              {/* Analytics */}
-              <Route 
-                path="/analytics/*" 
-                element={
-                  <ProtectedRoute>
-                    <AnalyticsPage />
-                  </ProtectedRoute>
-                } 
-              />
+                {/* Analytics */}
+                <Route 
+                  path="/analytics/*" 
+                  element={
+                    <ProtectedRoute requiredRoles={['admin', 'editor']}>
+                      <AnalyticsPage />
+                    </ProtectedRoute>
+                  } 
+                />
 
-              {/* Settings */}
-              <Route 
-                path="/settings/*" 
-                element={
-                  <ProtectedRoute>
-                    <SettingsPage />
-                  </ProtectedRoute>
-                } 
-              />
+                {/* Settings */}
+                <Route 
+                  path="/settings/*" 
+                  element={
+                    <ProtectedRoute>
+                      <SettingsPage />
+                    </ProtectedRoute>
+                  } 
+                />
 
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+                {/* Activity Page (placeholder) */}
+                <Route 
+                  path="/activity" 
+                  element={
+                    <ProtectedRoute>
+                      <div className="page">
+                        <div className="page-header">
+                          <h1 className="page-title">Activity Log</h1>
+                          <p className="page-subtitle">View all system activity and user actions</p>
+                        </div>
+                        <div className="card">
+                          <div className="card-body">
+                            <p>Activity log functionality coming soon...</p>
+                          </div>
+                        </div>
+                      </div>
+                    </ProtectedRoute>
+                  } 
+                />
+
+                {/* Fallback */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            )}
           </div>
         </main>
       </div>

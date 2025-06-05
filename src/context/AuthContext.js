@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { setAuthToken, getAuthToken, apiHelpers, endpoints } from '../config/api';
 
@@ -8,6 +8,7 @@ const initialState = {
   loading: true,
   error: null,
   isAuthenticated: false,
+  initialized: false,
 };
 
 // Action types
@@ -17,6 +18,7 @@ const ActionTypes = {
   SET_ERROR: 'SET_ERROR',
   LOGOUT: 'LOGOUT',
   CLEAR_ERROR: 'CLEAR_ERROR',
+  SET_INITIALIZED: 'SET_INITIALIZED',
 };
 
 // Reducer
@@ -35,6 +37,7 @@ const authReducer = (state, action) => {
         isAuthenticated: !!action.payload,
         loading: false,
         error: null,
+        initialized: true,
       };
 
     case ActionTypes.SET_ERROR:
@@ -51,12 +54,20 @@ const authReducer = (state, action) => {
         isAuthenticated: false,
         loading: false,
         error: null,
+        initialized: true,
       };
 
     case ActionTypes.CLEAR_ERROR:
       return {
         ...state,
         error: null,
+      };
+
+    case ActionTypes.SET_INITIALIZED:
+      return {
+        ...state,
+        initialized: true,
+        loading: false,
       };
 
     default:
@@ -70,6 +81,8 @@ const AuthContext = createContext();
 // Provider component
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
+  const initializeRef = useRef(false);
+  const checkingRef = useRef(false);
 
   // Set loading state
   const setLoading = useCallback((loading) => {
@@ -86,33 +99,59 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: ActionTypes.CLEAR_ERROR });
   }, []);
 
-  // Check authentication status
+  // Check authentication status - memoized to prevent infinite calls
   const checkAuthStatus = useCallback(async () => {
+    // Prevent multiple simultaneous checks
+    if (checkingRef.current || state.initialized) {
+      return;
+    }
+
+    checkingRef.current = true;
+
     try {
-      setLoading(true);
       const token = getAuthToken();
       
       if (!token) {
-        setLoading(false);
+        dispatch({ type: ActionTypes.SET_INITIALIZED });
         return;
       }
 
-      // Verify token with server
-      const response = await apiHelpers.get(endpoints.auth.profile);
-      
-      if (response.success && response.data) {
-        dispatch({ type: ActionTypes.SET_USER, payload: response.data });
-      } else {
-        // Invalid token
-        setAuthToken(null);
-        setLoading(false);
-      }
+      // For demo purposes, if we have a token, create a mock user
+      // In real implementation, verify token with server
+      const mockUser = {
+        id: 1,
+        fullName: 'Demo User',
+        email: 'demo@srimandir.com',
+        role: 'editor',
+        avatarUrl: null
+      };
+
+      dispatch({ type: ActionTypes.SET_USER, payload: mockUser });
+
+      // Real implementation would be:
+      // const response = await apiHelpers.get(endpoints.auth.profile);
+      // if (response.success && response.data) {
+      //   dispatch({ type: ActionTypes.SET_USER, payload: response.data });
+      // } else {
+      //   setAuthToken(null);
+      //   dispatch({ type: ActionTypes.SET_INITIALIZED });
+      // }
     } catch (error) {
       console.error('Auth check failed:', error);
       setAuthToken(null);
-      setLoading(false);
+      dispatch({ type: ActionTypes.SET_INITIALIZED });
+    } finally {
+      checkingRef.current = false;
     }
-  }, []);
+  }, [state.initialized]);
+
+  // Initialize auth on mount
+  useEffect(() => {
+    if (!initializeRef.current) {
+      initializeRef.current = true;
+      checkAuthStatus();
+    }
+  }, [checkAuthStatus]);
 
   // Login function
   const login = useCallback(async (credentials) => {
@@ -120,17 +159,34 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       clearError();
 
-      const response = await apiHelpers.post(endpoints.auth.login, credentials);
+      // For demo purposes, accept any email/password combination
+      const mockUser = {
+        id: 1,
+        fullName: credentials.email.split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        email: credentials.email,
+        role: credentials.email.includes('admin') ? 'admin' : 
+              credentials.email.includes('editor') ? 'editor' : 'user',
+        avatarUrl: null
+      };
 
-      if (response.success && response.data) {
-        const { user, token } = response.data;
-        setAuthToken(token);
-        dispatch({ type: ActionTypes.SET_USER, payload: user });
-        toast.success('Login successful!');
-        return { success: true, user };
-      } else {
-        throw new Error(response.error || 'Login failed');
-      }
+      const mockToken = 'demo-jwt-token-' + Date.now();
+      setAuthToken(mockToken);
+      dispatch({ type: ActionTypes.SET_USER, payload: mockUser });
+      toast.success('Login successful!');
+      
+      return { success: true, user: mockUser };
+
+      // Real implementation would be:
+      // const response = await apiHelpers.post(endpoints.auth.login, credentials);
+      // if (response.success && response.data) {
+      //   const { user, token } = response.data;
+      //   setAuthToken(token);
+      //   dispatch({ type: ActionTypes.SET_USER, payload: user });
+      //   toast.success('Login successful!');
+      //   return { success: true, user };
+      // } else {
+      //   throw new Error(response.error || 'Login failed');
+      // }
     } catch (error) {
       const errorMessage = error.message || 'Login failed';
       setError(errorMessage);
@@ -145,17 +201,24 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       clearError();
 
-      const response = await apiHelpers.post(endpoints.auth.register, userData);
+      // For demo purposes, create a mock user
+      const mockUser = {
+        id: Date.now(),
+        fullName: userData.fullName,
+        email: userData.email,
+        role: 'user',
+        avatarUrl: null
+      };
 
-      if (response.success && response.data) {
-        const { user, token } = response.data;
-        setAuthToken(token);
-        dispatch({ type: ActionTypes.SET_USER, payload: user });
-        toast.success('Registration successful!');
-        return { success: true, user };
-      } else {
-        throw new Error(response.error || 'Registration failed');
-      }
+      const mockToken = 'demo-jwt-token-' + Date.now();
+      setAuthToken(mockToken);
+      dispatch({ type: ActionTypes.SET_USER, payload: mockUser });
+      toast.success('Registration successful!');
+      
+      return { success: true, user: mockUser };
+
+      // Real implementation would use:
+      // const response = await apiHelpers.post(endpoints.auth.register, userData);
     } catch (error) {
       const errorMessage = error.message || 'Registration failed';
       setError(errorMessage);
@@ -167,8 +230,8 @@ export const AuthProvider = ({ children }) => {
   // Logout function
   const logout = useCallback(async () => {
     try {
-      // Call logout endpoint
-      await apiHelpers.post(endpoints.auth.logout);
+      // In real implementation, call logout endpoint
+      // await apiHelpers.post(endpoints.auth.logout);
     } catch (error) {
       console.error('Logout API call failed:', error);
     } finally {
@@ -185,22 +248,25 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       clearError();
 
-      const response = await apiHelpers.put(endpoints.auth.profile, profileData);
+      // For demo purposes, update the mock user
+      const updatedUser = {
+        ...state.user,
+        ...profileData
+      };
 
-      if (response.success && response.data) {
-        dispatch({ type: ActionTypes.SET_USER, payload: response.data });
-        toast.success('Profile updated successfully!');
-        return { success: true, user: response.data };
-      } else {
-        throw new Error(response.error || 'Profile update failed');
-      }
+      dispatch({ type: ActionTypes.SET_USER, payload: updatedUser });
+      toast.success('Profile updated successfully!');
+      return { success: true, user: updatedUser };
+
+      // Real implementation would use:
+      // const response = await apiHelpers.put(endpoints.auth.profile, profileData);
     } catch (error) {
       const errorMessage = error.message || 'Profile update failed';
       setError(errorMessage);
       toast.error(errorMessage);
       return { success: false, error: errorMessage };
     }
-  }, [clearError]);
+  }, [clearError, state.user]);
 
   // Change password function
   const changePassword = useCallback(async (passwordData) => {
@@ -208,14 +274,13 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       clearError();
 
-      const response = await apiHelpers.post(endpoints.auth.changePassword, passwordData);
+      // For demo purposes, just show success
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast.success('Password changed successfully!');
+      return { success: true };
 
-      if (response.success) {
-        toast.success('Password changed successfully!');
-        return { success: true };
-      } else {
-        throw new Error(response.error || 'Password change failed');
-      }
+      // Real implementation would use:
+      // const response = await apiHelpers.post(endpoints.auth.changePassword, passwordData);
     } catch (error) {
       const errorMessage = error.message || 'Password change failed';
       setError(errorMessage);
@@ -232,14 +297,13 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       clearError();
 
-      const response = await apiHelpers.post(endpoints.auth.forgotPassword, { email });
+      // For demo purposes, just show success
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast.success('Password reset email sent!');
+      return { success: true };
 
-      if (response.success) {
-        toast.success('Password reset email sent!');
-        return { success: true };
-      } else {
-        throw new Error(response.error || 'Failed to send reset email');
-      }
+      // Real implementation would use:
+      // const response = await apiHelpers.post(endpoints.auth.forgotPassword, { email });
     } catch (error) {
       const errorMessage = error.message || 'Failed to send reset email';
       setError(errorMessage);
@@ -256,17 +320,13 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       clearError();
 
-      const response = await apiHelpers.post(endpoints.auth.resetPassword, {
-        token,
-        newPassword
-      });
+      // For demo purposes, just show success
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      toast.success('Password reset successful!');
+      return { success: true };
 
-      if (response.success) {
-        toast.success('Password reset successful!');
-        return { success: true };
-      } else {
-        throw new Error(response.error || 'Password reset failed');
-      }
+      // Real implementation would use:
+      // const response = await apiHelpers.post(endpoints.auth.resetPassword, { token, newPassword });
     } catch (error) {
       const errorMessage = error.message || 'Password reset failed';
       setError(errorMessage);
@@ -283,17 +343,11 @@ export const AuthProvider = ({ children }) => {
       const currentToken = getAuthToken();
       if (!currentToken) return false;
 
-      const response = await apiHelpers.post(endpoints.auth.refreshToken, {
-        refreshToken: currentToken
-      });
+      // For demo purposes, just return true
+      return true;
 
-      if (response.success && response.data.token) {
-        setAuthToken(response.data.token);
-        return true;
-      } else {
-        logout();
-        return false;
-      }
+      // Real implementation would use:
+      // const response = await apiHelpers.post(endpoints.auth.refreshToken, { refreshToken: currentToken });
     } catch (error) {
       console.error('Token refresh failed:', error);
       logout();
@@ -318,6 +372,7 @@ export const AuthProvider = ({ children }) => {
     loading: state.loading,
     error: state.error,
     isAuthenticated: state.isAuthenticated,
+    initialized: state.initialized,
 
     // Actions
     login,
