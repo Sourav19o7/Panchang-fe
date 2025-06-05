@@ -1,21 +1,30 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-const BASE_URL = process.env.REACT_APP_API_URL;
+// Use environment variable or default to localhost for development
+const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 class ApiService {
   constructor() {
     this.client = axios.create({
       baseURL: BASE_URL,
-      timeout: 30000,
+      timeout: 60000, // Increased timeout for deployment
       headers: {
         'Content-Type': 'application/json',
       },
+      // Add explicit CORS and credential settings
+      withCredentials: false, // Set to false to avoid preflight issues
+      crossdomain: true,
     });
 
     // Request interceptor
     this.client.interceptors.request.use(
       (config) => {
+        // Add any additional headers needed for CORS
+        config.headers['Access-Control-Allow-Origin'] = '*';
+        config.headers['Access-Control-Allow-Headers'] = '*';
+        config.headers['Access-Control-Allow-Methods'] = '*';
+        
         return config;
       },
       (error) => {
@@ -23,12 +32,33 @@ class ApiService {
       }
     );
 
-    // Response interceptor
+    // Response interceptor with better error handling
     this.client.interceptors.response.use(
       (response) => {
         return response;
       },
       (error) => {
+        // Handle CORS errors specifically
+        if (error.message && error.message.includes('CORS')) {
+          console.error('CORS Error:', error);
+          toast.error('Network connection error. Please check your internet connection.');
+          return Promise.reject(error);
+        }
+
+        // Handle network errors
+        if (error.code === 'NETWORK_ERROR' || error.message === 'Network Error') {
+          console.error('Network Error:', error);
+          toast.error('Unable to connect to server. Please check your connection.');
+          return Promise.reject(error);
+        }
+
+        // Handle timeout errors
+        if (error.code === 'ECONNABORTED') {
+          console.error('Timeout Error:', error);
+          toast.error('Request timeout. Please try again.');
+          return Promise.reject(error);
+        }
+
         if (error.response?.status === 401) {
           // Token expired or invalid
           localStorage.removeItem('token');
@@ -38,7 +68,12 @@ class ApiService {
           toast.error('Access denied');
         } else if (error.response?.status >= 500) {
           toast.error('Server error. Please try again.');
+        } else if (error.response?.status === 0) {
+          // This often indicates CORS issues
+          console.error('Possible CORS issue - Status 0:', error);
+          toast.error('Connection blocked. Please check CORS settings.');
         }
+        
         return Promise.reject(error);
       }
     );
@@ -52,21 +87,65 @@ class ApiService {
     }
   }
 
-  // Generic HTTP methods
+  // Generic HTTP methods with better error handling
   async get(url, config = {}) {
-    return this.client.get(url, config);
+    try {
+      return await this.client.get(url, config);
+    } catch (error) {
+      console.error(`GET ${url} failed:`, error);
+      throw error;
+    }
   }
 
   async post(url, data = {}, config = {}) {
-    return this.client.post(url, data, config);
+    try {
+      return await this.client.post(url, data, config);
+    } catch (error) {
+      console.error(`POST ${url} failed:`, error);
+      throw error;
+    }
   }
 
   async put(url, data = {}, config = {}) {
-    return this.client.put(url, data, config);
+    try {
+      return await this.client.put(url, data, config);
+    } catch (error) {
+      console.error(`PUT ${url} failed:`, error);
+      throw error;
+    }
   }
 
   async delete(url, config = {}) {
-    return this.client.delete(url, config);
+    try {
+      return await this.client.delete(url, config);
+    } catch (error) {
+      console.error(`DELETE ${url} failed:`, error);
+      throw error;
+    }
+  }
+
+  // Test connection method
+  async testConnection() {
+    try {
+      const response = await this.get('/cors-test');
+      console.log('Connection test successful:', response.data);
+      return true;
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      return false;
+    }
+  }
+
+  // Health check method
+  async healthCheck() {
+    try {
+      const response = await this.client.get('/health');
+      console.log('Health check successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Health check failed:', error);
+      throw error;
+    }
   }
 
   // Puja-specific API methods
@@ -103,6 +182,7 @@ class ApiService {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 120000, // 2 minutes for file uploads
     });
   }
 
@@ -170,8 +250,6 @@ class ApiService {
     return this.post(`/puja/propositions/${propositionId}/variations`, data);
   }
 
-  
-
   // Advanced analysis methods using professional prompts
   async performCompetitiveAnalysis(data) {
     return this.post('/puja/analysis/competitive', data);
@@ -220,4 +298,12 @@ class ApiService {
   }
 }
 
+// Create and export the API instance
 export const api = new ApiService();
+
+// Test connection on startup in development
+if (process.env.NODE_ENV === 'development') {
+  api.testConnection().then(success => {
+    console.log('API Connection Test:', success ? 'SUCCESS' : 'FAILED');
+  });
+}

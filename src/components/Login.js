@@ -170,7 +170,7 @@ const Login = () => {
         {isLogin && (
           <div style={{ textAlign: 'center', marginTop: '1rem' }}>
             <p style={{ color: '#999', fontSize: '0.9rem' }}>
-              Demo credentials: admin@srimandir.com / password123
+              Demo credentials: admin@srimandir.com / admin123
             </p>
           </div>
         )}
