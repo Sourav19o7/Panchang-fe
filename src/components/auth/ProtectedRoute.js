@@ -19,13 +19,13 @@ const ProtectedRoute = ({
 
   // Redirect to login if not authenticated
   if (!isAuthenticated || !user) {
-    return (
-      <Navigate 
-        to={fallbackPath} 
-        state={{ from: location }} 
-        replace 
-      />
-    );
+    // return (
+    //   <Navigate 
+    //     to={fallbackPath} 
+    //     state={{ from: location }} 
+    //     replace 
+    //   />
+    // );
   }
 
   // Check role-based access

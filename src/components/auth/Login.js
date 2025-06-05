@@ -64,6 +64,8 @@ const Login = () => {
         localStorage.removeItem('rememberedEmail');
       }
 
+      console.log("Navigation to ", from)
+
       // Redirect to intended page or dashboard
       navigate(from, { replace: true });
     }
