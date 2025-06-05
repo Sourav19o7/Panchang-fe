@@ -1,143 +1,67 @@
-import React, { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
-import { useApp } from './context/AppContext';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './contexts/AuthContext';
+import Login from './components/Login';
+import Dashboard from './components/Dashboard';
+import Navbar from './components/Navbar';
+import './App.css';
 
-// Components
-import Header from './components/common/Header';
-import Sidebar from './components/common/Sidebar';
-import Loading from './components/common/Loading';
-import ProtectedRoute from './components/auth/ProtectedRoute';
+function AppContent() {
+  const { user, loading } = useAuth();
 
-// Pages
-import HomePage from './pages/HomePage';
-import PujaPage from './pages/PujaPage';
-import FeedbackPage from './pages/FeedbackPage';
-import AnalyticsPage from './pages/AnalyticsPage';
-import SettingsPage from './pages/SettingsPage';
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        <div className="loading-spinner">
+          <div className="spinner"></div>
+          <p>Loading Sri Mandir...</p>
+        </div>
+      </div>
+    );
+  }
 
-// Auth Components
-import Login from './components/auth/Login';
-import Register from './components/auth/Register';
+  return (
+    <div className="App">
+      {user && <Navbar />}
+      <Routes>
+        <Route 
+          path="/login" 
+          element={user ? <Navigate to="/dashboard" /> : <Login />} 
+        />
+        <Route 
+          path="/dashboard" 
+          element={user ? <Dashboard /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/" 
+          element={<Navigate to={user ? "/dashboard" : "/login"} />} 
+        />
+      </Routes>
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#fff',
+            color: '#333',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+            border: '1px solid rgba(255,165,0,0.2)',
+          },
+        }}
+      />
+    </div>
+  );
+}
 
 function App() {
-  const { user, loading: authLoading, isAuthenticated, initialized } = useAuth();
-  const { loading: appLoading, sidebarOpen } = useApp();
-
-  // Show loading screen while checking authentication
-  if (!initialized || authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loading message="Initializing application..." />
-      </div>
-    );
-  }
-
-  // If user is not authenticated, show auth routes
-  if (!isAuthenticated || !user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800">
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </div>
-    );
-  }
-
-  // Main app layout for authenticated users
   return (
-    <div className="app min-h-screen bg-gray-50">
-      <Header />
-      <div className="app-content flex">
-        <Sidebar />
-        <main className={`main-content flex-1 transition-all duration-200 ${
-          sidebarOpen ? 'ml-64' : 'ml-16'
-        } pt-16`}>
-          <div className="content-wrapper p-6 max-w-7xl mx-auto">
-            {appLoading ? (
-              <Loading message="Loading..." />
-            ) : (
-              <Routes>
-                {/* Dashboard */}
-                <Route 
-                  path="/" 
-                  element={
-                    <ProtectedRoute>
-                      <HomePage />
-                    </ProtectedRoute>
-                  } 
-                />
-
-                {/* Puja Management */}
-                <Route 
-                  path="/puja/*" 
-                  element={
-                    <ProtectedRoute>
-                      <PujaPage />
-                    </ProtectedRoute>
-                  } 
-                />
-
-                {/* Feedback Management */}
-                <Route 
-                  path="/feedback/*" 
-                  element={
-                    <ProtectedRoute>
-                      <FeedbackPage />
-                    </ProtectedRoute>
-                  } 
-                />
-
-                {/* Analytics */}
-                <Route 
-                  path="/analytics/*" 
-                  element={
-                    <ProtectedRoute requiredRoles={['admin', 'editor']}>
-                      <AnalyticsPage />
-                    </ProtectedRoute>
-                  } 
-                />
-
-                {/* Settings */}
-                <Route 
-                  path="/settings/*" 
-                  element={
-                    <ProtectedRoute>
-                      <SettingsPage />
-                    </ProtectedRoute>
-                  } 
-                />
-
-                {/* Activity Page (placeholder) */}
-                <Route 
-                  path="/activity" 
-                  element={
-                    <ProtectedRoute>
-                      <div className="page">
-                        <div className="page-header">
-                          <h1 className="page-title">Activity Log</h1>
-                          <p className="page-subtitle">View all system activity and user actions</p>
-                        </div>
-                        <div className="card">
-                          <div className="card-body">
-                            <p>Activity log functionality coming soon...</p>
-                          </div>
-                        </div>
-                      </div>
-                    </ProtectedRoute>
-                  } 
-                />
-
-                {/* Fallback */}
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            )}
-          </div>
-        </main>
-      </div>
-    </div>
+    <AuthProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </AuthProvider>
   );
 }
 
