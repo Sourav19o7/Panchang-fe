@@ -15,6 +15,7 @@ import PanchangGenerator from './PanchangGenerator';
 import PropositionGenerator from './PropositionGenerator';
 import FeedbackAnalysis from './FeedbackAnalysis';
 import AdvancedAnalytics from './AdvancedAnalytics';
+import TeamReview from './TeamReview';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('focus');
@@ -25,6 +26,8 @@ const Dashboard = () => {
     { id: 'propositions', name: 'Generate Pujas', icon: Sparkles, component: PropositionGenerator },
     { id: 'feedback', name: 'Feedback & Analysis', icon: BarChart3, component: FeedbackAnalysis },
     { id: 'advanced', name: 'Advanced Analytics', icon: Rocket, component: AdvancedAnalytics },
+
+{ id: 'team-review', name: 'Team Review', icon: Users, component: TeamReview },
   ];
 
   const ActiveComponent = tabs.find(tab => tab.id === activeTab)?.component;
